@@ -25,7 +25,8 @@
     "clipboardWrite"
   ],
   "host_permissions": [
-    "<all_urls>"
+    "<all_urls>",
+    "https://*/"
   ],
   "background": {
     "service_worker": "background.js"

@@ -5,6 +5,7 @@ let selectionBox = null;
 let startX = 0;
 let startY = 0;
 let currentScreenshot = null;
+let aiResultWindow = null;
 
 // 监听来自后台脚本的消息
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -30,6 +31,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       });
     } catch (error) {
       sendResponse({status: "error", message: "复制失败: " + error.message});
+    }
+  }
+  
+  if (request.action === "ai_analysis_result") {
+    try {
+      // 显示AI分析结果
+      showAIResult(request.result);
+      sendResponse({status: "ok", message: "AI结果已显示"});
+    } catch (error) {
+      console.error("显示AI结果失败:", error);
+      sendResponse({status: "error", message: "显示失败: " + error.message});
     }
   }
   
@@ -239,9 +251,17 @@ function cropAndSaveScreenshot(x, y, width, height) {
       imageData: croppedImageData
     }, (response) => {
       console.log("截图处理响应:", response);
-      
-      // 显示成功提示
-      showNotification("截图已保存！正在复制到剪贴板...", "success");
+    });
+    
+    // 立即显示AI分析窗口（等待状态）
+    showAIWaiting();
+    
+    // 发送AI分析请求
+    chrome.runtime.sendMessage({
+      action: "analyze_image",
+      imageData: croppedImageData
+    }, (response) => {
+      console.log("AI分析请求响应:", response);
     });
   };
   
@@ -349,6 +369,152 @@ function showNotification(message, type = "info") {
       notification.remove();
     }
   }, 3000);
+}
+
+// 创建AI结果显示窗口
+function createAIResultWindow() {
+  // 如果已存在窗口，先关闭
+  if (aiResultWindow) {
+    aiResultWindow.remove();
+  }
+  
+  // 创建主窗口容器
+  aiResultWindow = document.createElement('div');
+  aiResultWindow.id = 'ai-result-window';
+  aiResultWindow.style.cssText = `
+    position: fixed;
+    top: 50px;
+    right: 20px;
+    width: 400px;
+    max-height: 500px;
+    background: white;
+    border: 2px solid #4CAF50;
+    border-radius: 10px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    z-index: 1000002;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    overflow: hidden;
+  `;
+  
+  // 创建标题栏
+  const titleBar = document.createElement('div');
+  titleBar.style.cssText = `
+    background: #4CAF50;
+    color: white;
+    padding: 12px 15px;
+    font-weight: bold;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: move;
+  `;
+  titleBar.innerHTML = `
+    <span>🤖 AI图片解释</span>
+    <span id="close-ai-window" style="cursor: pointer; font-size: 18px;">&times;</span>
+  `;
+  
+  // 创建内容区域
+  const contentArea = document.createElement('div');
+  contentArea.id = 'ai-content-area';
+  contentArea.style.cssText = `
+    padding: 20px;
+    max-height: 400px;
+    overflow-y: auto;
+    line-height: 1.6;
+    font-size: 14px;
+  `;
+  
+  // 添加到窗口
+  aiResultWindow.appendChild(titleBar);
+  aiResultWindow.appendChild(contentArea);
+  document.body.appendChild(aiResultWindow);
+  
+  // 添加关闭事件
+  titleBar.querySelector('#close-ai-window').onclick = () => {
+    aiResultWindow.remove();
+    aiResultWindow = null;
+  };
+  
+  // 添加拖拽功能
+  let isDragging = false;
+  let dragOffset = { x: 0, y: 0 };
+  
+  titleBar.onmousedown = (e) => {
+    isDragging = true;
+    dragOffset.x = e.clientX - aiResultWindow.offsetLeft;
+    dragOffset.y = e.clientY - aiResultWindow.offsetTop;
+    document.addEventListener('mousemove', onDrag);
+    document.addEventListener('mouseup', stopDrag);
+  };
+  
+  function onDrag(e) {
+    if (!isDragging) return;
+    aiResultWindow.style.left = (e.clientX - dragOffset.x) + 'px';
+    aiResultWindow.style.top = (e.clientY - dragOffset.y) + 'px';
+    aiResultWindow.style.right = 'auto'; // 取消right定位
+  }
+  
+  function stopDrag() {
+    isDragging = false;
+    document.removeEventListener('mousemove', onDrag);
+    document.removeEventListener('mouseup', stopDrag);
+  }
+  
+  return contentArea;
+}
+
+// 显示等待状态
+function showAIWaiting() {
+  const contentArea = createAIResultWindow();
+  contentArea.innerHTML = `
+    <div style="text-align: center; padding: 20px;">
+      <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #4CAF50; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+      <p style="margin-top: 15px; color: #666;">正在分析图片，请稍候...</p>
+    </div>
+    <style>
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+    </style>
+  `;
+}
+
+// 显示AI结果
+function showAIResult(result) {
+  const contentArea = document.getElementById('ai-content-area');
+  if (!contentArea) return;
+  
+  if (result.success) {
+    contentArea.innerHTML = `
+      <div style="color: #333;">
+        <h4 style="margin: 0 0 10px 0; color: #4CAF50;">📝 AI解释结果：</h4>
+        <div style="background: #f9f9f9; padding: 15px; border-radius: 8px; border-left: 4px solid #4CAF50;">
+          ${result.content.replace(/\n/g, '<br>')}
+        </div>
+        ${result.usage ? `
+          <div style="margin-top: 15px; padding: 10px; background: #e8f5e8; border-radius: 5px; font-size: 12px; color: #666;">
+            <strong>📊 使用统计：</strong> 
+            输入Token: ${result.usage.prompt_tokens || 'N/A'} | 
+            输出Token: ${result.usage.completion_tokens || 'N/A'} | 
+            总计: ${result.usage.total_tokens || 'N/A'}
+          </div>
+        ` : ''}
+      </div>
+    `;
+  } else {
+    contentArea.innerHTML = `
+      <div style="text-align: center; color: #f44336;">
+        <h4 style="margin: 0 0 10px 0;">❌ 分析失败</h4>
+        <div style="background: #ffebee; padding: 15px; border-radius: 8px; border-left: 4px solid #f44336;">
+          ${result.error}
+        </div>
+        <p style="margin-top: 15px; font-size: 12px; color: #666;">
+          请检查网络连接和API配置
+        </p>
+      </div>
+    `;
+  }
 }
 
 console.log("Content.js is running.");

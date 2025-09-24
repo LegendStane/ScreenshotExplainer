@@ -1,3 +1,47 @@
+// AI配置 - 动态配置管理
+const DEFAULT_AI_CONFIG = {
+  endpoint: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+  apiKey: "",
+  modelName: "qwen3-vl-plus"
+};
+
+// 当前使用的配置
+let currentConfig = { ...DEFAULT_AI_CONFIG };
+
+// 加载配置
+async function loadConfig() {
+  try {
+    const stored = await chrome.storage.local.get(['ai_config']);
+    if (stored.ai_config) {
+      currentConfig = { ...DEFAULT_AI_CONFIG, ...stored.ai_config };
+      console.log("配置已加载:", currentConfig);
+    } else {
+      console.log("使用默认配置:", currentConfig);
+    }
+  } catch (error) {
+    console.error("加载配置失败:", error);
+    currentConfig = { ...DEFAULT_AI_CONFIG };
+  }
+}
+
+// 保存配置
+async function saveConfig(newConfig) {
+  try {
+    await chrome.storage.local.set({ ai_config: newConfig });
+    currentConfig = { ...DEFAULT_AI_CONFIG, ...newConfig };
+    console.log("配置已保存:", currentConfig);
+    return { success: true };
+  } catch (error) {
+    console.error("保存配置失败:", error);
+    return { success: false, error: error.message };
+  }
+}
+
+// 获取当前配置
+function getCurrentConfig() {
+  return { ...currentConfig };
+}
+
 // 监听来自 manifest.json 的快捷键命令
 chrome.commands.onCommand.addListener((command) => {
   if (command === "start_screenshot") {
@@ -73,6 +117,29 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     handleAreaScreenshot(request.imageData, sender.tab.id);
     sendResponse({status: "ok", message: "区域截图已处理"});
   }
+  
+  if (request.action === "analyze_image") {
+    // 异步处理AI分析
+    handleAIAnalysis(request.imageData, sender.tab.id);
+    sendResponse({status: "ok", message: "AI分析已启动"});
+  }
+  
+  if (request.action === "get_config") {
+    // 返回当前配置
+    sendResponse({status: "ok", config: getCurrentConfig()});
+  }
+  
+  if (request.action === "save_config") {
+    // 保存新配置
+    saveConfig(request.config).then((result) => {
+      sendResponse(result);
+    }).catch((error) => {
+      sendResponse({success: false, error: error.message});
+    });
+    return true; // 保持异步响应通道开放
+  }
+  
+  return true; // 保持消息通道开放
 });
 
 // 处理区域截图的函数
@@ -103,4 +170,119 @@ function handleAreaScreenshot(imageData, tabId) {
   });
 }
 
+// 处理AI分析请求
+async function handleAIAnalysis(imageData, tabId) {
+  try {
+    console.log("开始处理AI分析请求...");
+    
+    // 调用AI API
+    const result = await callAIAPI(imageData);
+    
+    // 将结果发送回content script
+    chrome.tabs.sendMessage(tabId, {
+      action: "ai_analysis_result",
+      result: result
+    }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.error("发送AI结果失败:", chrome.runtime.lastError.message);
+      } else {
+        console.log("AI结果已发送到content script");
+      }
+    });
+    
+  } catch (error) {
+    console.error("AI分析处理失败:", error);
+    
+    // 发送错误结果
+    chrome.tabs.sendMessage(tabId, {
+      action: "ai_analysis_result",
+      result: {
+        success: false,
+        error: "AI分析处理失败: " + error.message
+      }
+    });
+  }
+}
+
+// AI API调用函数
+async function callAIAPI(imageBase64) {
+  try {
+    console.log("开始调用AI API...");
+    
+    // 检查配置是否完整
+    if (!currentConfig.endpoint || !currentConfig.apiKey || !currentConfig.modelName) {
+      throw new Error("AI配置不完整，请在设置中配置endpoint、apiKey和modelName");
+    }
+    
+    // 构建OpenAI兼容的请求
+    const requestBody = {
+      model: currentConfig.modelName,
+      messages: [
+        {
+          role: "system",
+          content: "你需要用简体中文帮助用户解释图片中的内容"
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "这是需要解释的图片"
+            },
+            {
+              type: "image_url",
+              image_url: {
+                url: imageBase64
+              }
+            }
+          ]
+        }
+      ],
+      max_tokens: 1000,
+      temperature: 0.7
+    };
+    
+    console.log("发送AI请求...");
+    
+    const response = await fetch(currentConfig.endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentConfig.apiKey}`
+      },
+      body: JSON.stringify(requestBody)
+    });
+    
+    if (!response.ok) {
+      throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    console.log("AI API响应:", data);
+    
+    // 提取AI回复内容
+    if (data.choices && data.choices.length > 0 && data.choices[0].message) {
+      const aiResponse = data.choices[0].message.content;
+      console.log("AI解释内容:", aiResponse);
+      return {
+        success: true,
+        content: aiResponse,
+        usage: data.usage || null
+      };
+    } else {
+      throw new Error("API返回格式异常，找不到回复内容");
+    }
+    
+  } catch (error) {
+    console.error("AI API调用失败:", error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
 console.log("Background.js is running.");
+
+// 启动时加载配置
+loadConfig();
