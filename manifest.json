@@ -40,8 +40,8 @@
   "commands": {
     "start_screenshot": {
       "suggested_key": {
-        "default": "Ctrl+Shift+U",
-        "mac": "Command+Shift+U"
+        "default": "Ctrl+Shift+E",
+        "mac": "Command+Shift+E"
       },
       "description": "截图并发送给AI"
     }
