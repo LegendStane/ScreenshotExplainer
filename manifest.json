@@ -49,6 +49,10 @@
   "web_accessible_resources": [
     {
       "resources": [
+        "katex/*.js",
+        "katex/*.css",
+        "katex/fonts/*",
+        "katex/contrib/*"
       ],
       "matches": ["<all_urls>"]
     }

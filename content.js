@@ -600,6 +600,13 @@ async function showAIWaiting() {
 // 简单但功能完整的 Markdown 解析器
 function renderMarkdownToHTML(text) {
   if (!text) return '';
+
+  const blockFormulas = [];
+  text = text.replace(/\$\$([\s\S]+?)\$\$/g, (match, formula) => {
+    const id = `@@FORMULA_BLOCK_${blockFormulas.length}@@`;
+    blockFormulas.push(match); // 保存完整的 $$...$$
+    return id;
+  });
   
   console.log('使用简单 Markdown 解析器渲染:', text.substring(0, 100) + '...');
   
@@ -678,9 +685,57 @@ function renderMarkdownToHTML(text) {
     .replace(/<br>(<h[1-6])/g, '$1')
     .replace(/<br>(<pre)/g, '$1');
   
+  blockFormulas.forEach((formula, idx) => {
+    const id = `@@FORMULA_BLOCK_${idx}@@`;
+    html = html.replace(id, `<div>\$${formula}\$</div>`);
+  });
+
   console.log('Markdown 解析完成，HTML长度:', html.length);
   return html;
 }
+
+// KaTeX initialization script
+// 异步加载 JS
+function loadScript(path) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = chrome.runtime.getURL(path);
+    script.onload = () => resolve();
+    script.onerror = (e) => reject(e);
+    document.head.appendChild(script);
+  });
+}
+
+// 异步加载 CSS
+function loadCSS(path) {
+  return new Promise((resolve, reject) => {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = chrome.runtime.getURL(path);
+    link.onload = () => resolve();
+    link.onerror = (e) => reject(e);
+    document.head.appendChild(link);
+  });
+}
+
+function injectScript(code) {
+  const script = document.createElement('script');
+  script.textContent = code;
+  document.body.appendChild(script);
+  script.remove();
+}
+
+async function renderKaTeX() {
+  try {
+    await loadCSS('katex/katex.min.css');
+    await loadScript('katex/katex.min.js');
+    await loadScript('katex/contrib/auto-render.min.js');
+    await loadScript('katex/init-katex.js');
+  } catch (err) {
+    console.error('Failed to load KaTeX:', err);
+  }
+}
+
 
 // 使用简单 Markdown 渲染器
 async function renderMarkdownWithEasyMarkdown(text) {
@@ -735,6 +790,8 @@ async function showAIResult(result) {
       </div>
     `;
   }
+  renderKaTeX();
+  console.log("Loading Latex Success!");
 }
 
 console.log("Content.js is running.");
