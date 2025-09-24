@@ -38,5 +38,5 @@
 
 5. 截图并解析
 
-   按快捷键截图，Windows下为Ctrl+Shift+E，MacOS下为Command+Shift+E。截图后会跳出弹窗，等待解析完成即可。拖动弹窗右下角三角区域可改变其大小和形状。
+   按快捷键截图，Windows下为Ctrl+Shift+E，MacOS下为Command+Shift+E，若有冲突可以自行在manifest.json中修改。截图后会跳出弹窗，等待解析完成即可。拖动弹窗右下角三角区域可改变其大小和形状。
 
