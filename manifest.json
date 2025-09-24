@@ -45,5 +45,12 @@
       },
       "description": "截图并发送给AI"
     }
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }

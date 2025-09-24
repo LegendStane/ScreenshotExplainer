@@ -597,16 +597,120 @@ async function showAIWaiting() {
 }
 
 // 显示AI结果
-function showAIResult(result) {
+// 简单但功能完整的 Markdown 解析器
+function renderMarkdownToHTML(text) {
+  if (!text) return '';
+  
+  console.log('使用简单 Markdown 解析器渲染:', text.substring(0, 100) + '...');
+  
+  let html = text
+    // 处理代码块 (``` 包围的多行代码)
+    .replace(/```([\s\S]*?)```/g, function(match, code) {
+      return '<pre style="background: #1a1a1a; color: #f8f8f2; padding: 12px; margin: 8px 0; border-radius: 6px; overflow-x: auto; font-family: Consolas, Monaco, monospace; border: 1px solid #333;"><code>' + 
+        code.trim().replace(/</g, '&lt;').replace(/>/g, '&gt;') + 
+        '</code></pre>';
+    })
+    
+    // 处理标题 (必须在行首)
+    .replace(/^#### (.*$)/gim, '<h4 style="color: #4CAF50; margin: 10px 0 6px 0; font-size: 15px; font-weight: bold;">$1</h4>')
+    .replace(/^### (.*$)/gim, '<h3 style="color: #4CAF50; margin: 12px 0 8px 0; font-size: 17px; font-weight: bold;">$1</h3>')
+    .replace(/^## (.*$)/gim, '<h2 style="color: #4CAF50; margin: 14px 0 10px 0; font-size: 19px; font-weight: bold;">$1</h2>')
+    .replace(/^# (.*$)/gim, '<h1 style="color: #4CAF50; margin: 16px 0 12px 0; font-size: 21px; font-weight: bold;">$1</h1>')
+    
+    // 处理引用 (> 开头的行)
+    .replace(/^> (.*$)/gim, '<blockquote style="border-left: 4px solid #4CAF50; padding: 8px 12px; margin: 8px 0; background: #2a2a2a; color: #ccc; font-style: italic; border-radius: 4px;">$1</blockquote>')
+    
+    // 处理无序列表 (- 或 * 开头)
+    .replace(/^[\s]*[-\*]\s+(.*)$/gim, '<li style="margin: 3px 0; color: #e0e0e0; list-style-type: disc;">$1</li>')
+    
+    // 处理有序列表 (数字. 开头)
+    .replace(/^[\s]*\d+\.\s+(.*)$/gim, '<li style="margin: 3px 0; color: #e0e0e0;">$1</li>')
+    
+    // 处理粗体 **文本**
+    .replace(/\*\*(.*?)\*\*/g, '<strong style="color: #fff; font-weight: bold;">$1</strong>')
+    
+    // 处理斜体 *文本*
+    .replace(/(?<!\*)\*([^*\n]+?)\*(?!\*)/g, '<em style="color: #ccc; font-style: italic;">$1</em>')
+    
+    // 处理删除线 ~~文本~~
+    .replace(/~~(.*?)~~/g, '<del style="color: #888; text-decoration: line-through;">$1</del>')
+    
+    // 处理行内代码 `代码`
+    .replace(/`([^`\n]+?)`/g, '<code style="background: #1a1a1a; color: #f8f8f2; padding: 2px 6px; border-radius: 3px; font-family: Consolas, Monaco, monospace; font-size: 0.9em;">$1</code>')
+    
+    // 处理链接 [文本](URL)
+    .replace(/\[([^\]]+?)\]\(([^)]+?)\)/g, '<a style="color: #4CAF50; text-decoration: underline; cursor: pointer;" target="_blank" href="$2">$1</a>')
+    
+    // 处理图片 ![alt](src)
+    .replace(/!\[([^\]]*?)\]\(([^)]+?)\)/g, '<img src="$2" alt="$1" style="max-width: 100%; height: auto; border-radius: 4px; margin: 4px 0;" />')
+    
+    // 处理水平分割线 --- 或 ***
+    .replace(/^[-*]{3,}$/gim, '<hr style="border: none; border-top: 2px solid #4CAF50; margin: 16px 0; opacity: 0.6;" />')
+    
+    // 处理换行
+    .replace(/\n/g, '<br>');
+  
+  // 将连续的 <li> 包装在 <ul> 或 <ol> 中
+  html = html.replace(/(<li[^>]*>.*?<\/li>(?:\s*<br>\s*<li[^>]*>.*?<\/li>)*)/g, function(match) {
+    const items = match.replace(/<br>/g, '');
+    // 检查是否是有序列表（通过查看原始文本是否包含数字）
+    const isOrdered = /^\d+\./.test(text);
+    const listTag = isOrdered ? 'ol' : 'ul';
+    return `<${listTag} style="margin: 8px 0; padding-left: 20px; color: #e0e0e0;">${items}</${listTag}>`;
+  });
+  
+  // 将连续的 <blockquote> 合并
+  html = html.replace(/(<blockquote[^>]*>.*?<\/blockquote>)(\s*<br>\s*<blockquote[^>]*>.*?<\/blockquote>)*/g, function(match) {
+    const quotes = match.replace(/<br>/g, '').replace(/<\/blockquote><blockquote[^>]*>/g, '<br>');
+    return quotes;
+  });
+  
+  // 清理多余的 <br>
+  html = html
+    .replace(/(<\/ul>)<br>/g, '$1')
+    .replace(/(<\/ol>)<br>/g, '$1')
+    .replace(/(<\/blockquote>)<br>/g, '$1')
+    .replace(/(<\/h[1-6]>)<br>/g, '$1')
+    .replace(/(<\/pre>)<br>/g, '$1')
+    .replace(/<br>(<ul)/g, '$1')
+    .replace(/<br>(<ol)/g, '$1')
+    .replace(/<br>(<blockquote)/g, '$1')
+    .replace(/<br>(<h[1-6])/g, '$1')
+    .replace(/<br>(<pre)/g, '$1');
+  
+  console.log('Markdown 解析完成，HTML长度:', html.length);
+  return html;
+}
+
+// 使用简单 Markdown 渲染器
+async function renderMarkdownWithEasyMarkdown(text) {
+  if (!text) return '';
+  
+  try {
+    // 直接使用我们的简单 Markdown 解析器
+    return renderMarkdownToHTML(text);
+  } catch (error) {
+    console.error('Markdown 渲染失败，使用纯文本:', error);
+    // 如果连简单解析器都失败了，就使用最基本的处理
+    return text.replace(/\n/g, '<br>');
+  }
+}
+
+async function showAIResult(result) {
   const contentArea = document.getElementById('ai-content-area');
   if (!contentArea) return;
   
   if (result.success) {
+    console.log('Displaying AI result with easy-markdown rendering...');
+    
+    // 使用 easy-markdown 渲染 Markdown 内容
+    const renderedContent = await renderMarkdownWithEasyMarkdown(result.content);
+    
     contentArea.innerHTML = `
       <div>
-        <h4 style="margin: 0 0 10px 0; color: #4CAF50; font-size: 14px;">📝 AI解释结果：</h4>
-        <div style="background: #2a2a2a; padding: 12px; border-radius: 6px; border-left: 3px solid #4CAF50; color: #e0e0e0;">
-          ${result.content.replace(/\n/g, '<br>')}
+        <h4 style="margin: 0 0 10px 0; color: #4CAF50; font-size: 14px;">🤖 AI分析结果</h4>
+        <div id="ai-result-content" style="background: #2a2a2a; padding: 12px; border-radius: 6px; border-left: 3px solid #4CAF50; color: #e0e0e0; line-height: 1.6; overflow-wrap: break-word; word-wrap: break-word;">
+          ${renderedContent}
         </div>
         ${result.usage ? `
           <div style="margin-top: 12px; padding: 8px; background: #1f2a1f; border-radius: 4px; font-size: 11px; color: #90ee90;">
