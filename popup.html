@@ -11,7 +11,6 @@
       margin: 0;
       background: #1a1a1a;
       border: 2px solid #666;
-      border-radius: 12px;
       overflow: hidden;
     }
 
@@ -168,17 +167,17 @@
     <form id="configForm">
       <div class="form-group">
         <label for="endpoint">API Endpoint</label>
-        <input type="url" id="endpoint" name="endpoint" placeholder="https://api.openai.com/v1/chat/completions" required>
+        <input type="url" id="endpoint" name="endpoint" placeholder="请输入API Endpoint" required>
       </div>
 
       <div class="form-group">
         <label for="apiKey">API Key</label>
-        <input type="password" id="apiKey" name="apiKey" placeholder="请输入您的API密钥" required>
+        <input type="password" id="apiKey" name="apiKey" placeholder="请输入API Key" required>
       </div>
 
       <div class="form-group">
         <label for="modelName">Model Name</label>
-        <input type="text" id="modelName" name="modelName" placeholder="qwen-plus" required>
+        <input type="text" id="modelName" name="modelName" placeholder="请输入Model Name" required>
       </div>
 
       <div class="btn-group">

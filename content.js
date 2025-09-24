@@ -7,6 +7,46 @@ let startY = 0;
 let currentScreenshot = null;
 let aiResultWindow = null;
 
+// 默认窗口尺寸
+const DEFAULT_WINDOW_SIZE = {
+  width: 400,
+  height: 500
+};
+
+// 保存窗口尺寸
+async function saveWindowSize() {
+  if (!aiResultWindow) return;
+  
+  try {
+    const windowSize = {
+      width: aiResultWindow.offsetWidth,
+      height: aiResultWindow.offsetHeight
+    };
+    
+    await chrome.storage.local.set({ 'ai_window_size': windowSize });
+    console.log('AI窗口尺寸已保存:', windowSize);
+  } catch (error) {
+    console.error('保存窗口尺寸失败:', error);
+  }
+}
+
+// 加载窗口尺寸
+async function loadWindowSize() {
+  try {
+    const result = await chrome.storage.local.get(['ai_window_size']);
+    if (result.ai_window_size) {
+      console.log('AI窗口尺寸已加载:', result.ai_window_size);
+      return result.ai_window_size;
+    }
+  } catch (error) {
+    console.error('加载窗口尺寸失败:', error);
+  }
+  
+  // 返回默认尺寸
+  console.log('使用默认窗口尺寸:', DEFAULT_WINDOW_SIZE);
+  return DEFAULT_WINDOW_SIZE;
+}
+
 // 监听来自后台脚本的消息
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   console.log("Content script 收到消息:", request);
@@ -254,7 +294,9 @@ function cropAndSaveScreenshot(x, y, width, height) {
     });
     
     // 立即显示AI分析窗口（等待状态）
-    showAIWaiting();
+    showAIWaiting().then(() => {
+      console.log("AI等待窗口已显示");
+    });
     
     // 发送AI分析请求
     chrome.runtime.sendMessage({
@@ -305,7 +347,6 @@ async function copyToClipboard(imageData) {
     await navigator.clipboard.write([clipboardItem]);
     
     console.log("截图已成功复制到剪贴板");
-    showNotification("截图已复制到剪贴板！可以粘贴使用", "success");
     return "截图已复制到剪贴板";
     
   } catch (error) {
@@ -372,11 +413,15 @@ function showNotification(message, type = "info") {
 }
 
 // 创建AI结果显示窗口
-function createAIResultWindow() {
-  // 如果已存在窗口，先关闭
+async function createAIResultWindow() {
+  // 如果已存在窗口，先关闭并保存尺寸
   if (aiResultWindow) {
+    await saveWindowSize();
     aiResultWindow.remove();
   }
+  
+  // 加载保存的窗口尺寸
+  const savedSize = await loadWindowSize();
   
   // 创建主窗口容器
   aiResultWindow = document.createElement('div');
@@ -385,52 +430,76 @@ function createAIResultWindow() {
     position: fixed;
     top: 50px;
     right: 20px;
-    width: 400px;
-    max-height: 500px;
-    background: white;
-    border: 2px solid #4CAF50;
-    border-radius: 10px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    width: ${savedSize.width}px;
+    height: ${savedSize.height}px;
+    min-width: 300px;
+    min-height: 200px;
+    max-height: 600px;
+    background: #1a1a1a;
+    border: 2px solid #666;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
     z-index: 1000002;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    overflow: hidden;
+    display: flex;
+    flex-direction: column;
   `;
   
   // 创建标题栏
   const titleBar = document.createElement('div');
   titleBar.style.cssText = `
-    background: #4CAF50;
-    color: white;
-    padding: 12px 15px;
-    font-weight: bold;
+    background: #2a2a2a;
+    color: #e0e0e0;
+    padding: 10px 12px;
+    font-weight: 500;
+    font-size: 13px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     cursor: move;
+    border-bottom: 1px solid #444;
   `;
   titleBar.innerHTML = `
-    <span>🤖 AI图片解释</span>
-    <span id="close-ai-window" style="cursor: pointer; font-size: 18px;">&times;</span>
+    <span>解析</span>
+    <span id="close-ai-window" style="cursor: pointer; font-size: 16px; color: #ccc; hover: #fff;">&times;</span>
   `;
   
   // 创建内容区域
   const contentArea = document.createElement('div');
   contentArea.id = 'ai-content-area';
   contentArea.style.cssText = `
-    padding: 20px;
-    max-height: 400px;
+    padding: 15px;
+    flex: 1;
     overflow-y: auto;
-    line-height: 1.6;
-    font-size: 14px;
+    line-height: 1.5;
+    font-size: 13px;
+    background: #1a1a1a;
+    color: #e0e0e0;
   `;
   
   // 添加到窗口
   aiResultWindow.appendChild(titleBar);
   aiResultWindow.appendChild(contentArea);
+  
+  // 创建调整大小的拖拽句柄
+  const resizeHandle = document.createElement('div');
+  resizeHandle.style.cssText = `
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 20px;
+    height: 20px;
+    cursor: se-resize;
+    background: linear-gradient(-45deg, transparent 40%, #888 40%, #888 60%, transparent 60%);
+    z-index: 10;
+  `;
+  aiResultWindow.appendChild(resizeHandle);
+  
   document.body.appendChild(aiResultWindow);
   
   // 添加关闭事件
-  titleBar.querySelector('#close-ai-window').onclick = () => {
+  titleBar.querySelector('#close-ai-window').onclick = async () => {
+    await saveWindowSize(); // 关闭前保存窗口尺寸
     aiResultWindow.remove();
     aiResultWindow = null;
   };
@@ -440,15 +509,20 @@ function createAIResultWindow() {
   let dragOffset = { x: 0, y: 0 };
   
   titleBar.onmousedown = (e) => {
+    // 只在点击标题栏文字区域时才启用拖拽，避免干扰关闭按钮
+    if (e.target.id === 'close-ai-window') return;
+    
     isDragging = true;
     dragOffset.x = e.clientX - aiResultWindow.offsetLeft;
     dragOffset.y = e.clientY - aiResultWindow.offsetTop;
     document.addEventListener('mousemove', onDrag);
     document.addEventListener('mouseup', stopDrag);
+    e.preventDefault();
   };
   
   function onDrag(e) {
     if (!isDragging) return;
+    e.preventDefault();
     aiResultWindow.style.left = (e.clientX - dragOffset.x) + 'px';
     aiResultWindow.style.top = (e.clientY - dragOffset.y) + 'px';
     aiResultWindow.style.right = 'auto'; // 取消right定位
@@ -460,12 +534,54 @@ function createAIResultWindow() {
     document.removeEventListener('mouseup', stopDrag);
   }
   
+  // 添加调整大小功能
+  let isResizing = false;
+  let resizeStartPos = { x: 0, y: 0 };
+  let resizeStartSize = { width: 0, height: 0 };
+  
+  resizeHandle.onmousedown = (e) => {
+    e.preventDefault();
+    e.stopPropagation(); // 防止触发拖拽
+    isResizing = true;
+    resizeStartPos.x = e.clientX;
+    resizeStartPos.y = e.clientY;
+    resizeStartSize.width = aiResultWindow.offsetWidth;
+    resizeStartSize.height = aiResultWindow.offsetHeight;
+    
+    document.addEventListener('mousemove', onResize);
+    document.addEventListener('mouseup', stopResize);
+  };
+  
+  function onResize(e) {
+    if (!isResizing) return;
+    e.preventDefault();
+    
+    const deltaX = e.clientX - resizeStartPos.x;
+    const deltaY = e.clientY - resizeStartPos.y;
+    
+    const newWidth = Math.max(300, resizeStartSize.width + deltaX);
+    const newHeight = Math.max(200, resizeStartSize.height + deltaY);
+    
+    aiResultWindow.style.width = newWidth + 'px';
+    aiResultWindow.style.height = newHeight + 'px';
+  }
+  
+  function stopResize() {
+    if (isResizing) {
+      // 调整大小完成后保存尺寸
+      saveWindowSize();
+    }
+    isResizing = false;
+    document.removeEventListener('mousemove', onResize);
+    document.removeEventListener('mouseup', stopResize);
+  }
+  
   return contentArea;
 }
 
 // 显示等待状态
-function showAIWaiting() {
-  const contentArea = createAIResultWindow();
+async function showAIWaiting() {
+  const contentArea = await createAIResultWindow();
   contentArea.innerHTML = `
     <div style="text-align: center; padding: 20px;">
       <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #4CAF50; border-radius: 50%; animation: spin 1s linear infinite;"></div>
@@ -487,13 +603,13 @@ function showAIResult(result) {
   
   if (result.success) {
     contentArea.innerHTML = `
-      <div style="color: #333;">
-        <h4 style="margin: 0 0 10px 0; color: #4CAF50;">📝 AI解释结果：</h4>
-        <div style="background: #f9f9f9; padding: 15px; border-radius: 8px; border-left: 4px solid #4CAF50;">
+      <div>
+        <h4 style="margin: 0 0 10px 0; color: #4CAF50; font-size: 14px;">📝 AI解释结果：</h4>
+        <div style="background: #2a2a2a; padding: 12px; border-radius: 6px; border-left: 3px solid #4CAF50; color: #e0e0e0;">
           ${result.content.replace(/\n/g, '<br>')}
         </div>
         ${result.usage ? `
-          <div style="margin-top: 15px; padding: 10px; background: #e8f5e8; border-radius: 5px; font-size: 12px; color: #666;">
+          <div style="margin-top: 12px; padding: 8px; background: #1f2a1f; border-radius: 4px; font-size: 11px; color: #90ee90;">
             <strong>📊 使用统计：</strong> 
             输入Token: ${result.usage.prompt_tokens || 'N/A'} | 
             输出Token: ${result.usage.completion_tokens || 'N/A'} | 
@@ -504,12 +620,12 @@ function showAIResult(result) {
     `;
   } else {
     contentArea.innerHTML = `
-      <div style="text-align: center; color: #f44336;">
-        <h4 style="margin: 0 0 10px 0;">❌ 分析失败</h4>
-        <div style="background: #ffebee; padding: 15px; border-radius: 8px; border-left: 4px solid #f44336;">
+      <div style="text-align: center;">
+        <h4 style="margin: 0 0 10px 0; color: #ff6b6b; font-size: 14px;">❌ 分析失败</h4>
+        <div style="background: #2a1a1a; padding: 12px; border-radius: 6px; border-left: 3px solid #ff6b6b; color: #ffcccb;">
           ${result.error}
         </div>
-        <p style="margin-top: 15px; font-size: 12px; color: #666;">
+        <p style="margin-top: 12px; font-size: 11px; color: #999;">
           请检查网络连接和API配置
         </p>
       </div>

@@ -4,7 +4,7 @@
 import os
 import shutil
 from pathlib import Path
-from PIL import Image
+from PIL import Image, ImageDraw
 import tkinter as tk
 from tkinter import filedialog, messagebox
 
@@ -56,9 +56,30 @@ def clear_icons_folder():
   print("已创建icons")
 
 
+def create_circular_icon(image, target_size):
+  """创建圆形图标，圆形直径等于图标边长，周围透明"""
+  # 创建一个透明背景的图像
+  icon = Image.new('RGBA', (target_size, target_size), (0, 0, 0, 0))
+  
+  # 将原图缩放到目标尺寸（圆形将铺满整个图标区域）
+  resized_image = image.resize((target_size, target_size), Image.Resampling.LANCZOS)
+  
+  # 创建圆形遮罩，直径等于target_size
+  mask = Image.new('L', (target_size, target_size), 0)
+  draw = ImageDraw.Draw(mask)
+  draw.ellipse((0, 0, target_size, target_size), fill=255)
+  
+  # 创建圆形图像
+  circular_image = Image.new('RGBA', (target_size, target_size), (0, 0, 0, 0))
+  circular_image.paste(resized_image, (0, 0))
+  circular_image.putalpha(mask)
+  
+  return circular_image
+
+
 def resize_to_square(image, target_size):
-  resized = image.resize((target_size, target_size), Image.Resampling.LANCZOS)
-  return resized
+  """已弃用：使用create_circular_icon代替"""
+  return create_circular_icon(image, target_size)
 
 
 def generate_icons(image_path):
@@ -86,9 +107,9 @@ def generate_icons(image_path):
 
 def main():
   """主函数"""
-  print("=== 图标生成器 ===")
+  print("=== Chrome扩展图标生成器 ===")
   print("请选择一张图片文件（PNG/JPEG/JPG格式）")
-  print("要求：图片的最小边至少为128像素\n")
+  print("要求：图片的最小边至少为128像素")
   
   try:
     # 1. 选择图片文件
@@ -109,15 +130,15 @@ def main():
     # 4. 生成图标
     generate_icons(image_path)
     
-    print("\n=== 图标生成完成！ ===")
-    print("生成的文件：")
+    print("\n=== Chrome扩展图标生成完成！ ===")
+    print("生成的圆形图标文件：")
     for size in [16, 24, 32, 48, 128]:
-      print(f"  - icons/icon{size}.png")
+      print(f"  - icons/icon{size}.png (透明背景圆形)")
     
     # 显示成功消息框
     root = tk.Tk()
     root.withdraw()
-    messagebox.showinfo("完成", "图标生成成功！\n请查看icons文件夹。")
+    messagebox.showinfo("完成", "完成，请查看icons文件夹！")
     root.destroy()
     
   except ValueError as e:
