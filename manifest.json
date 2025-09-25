@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "截图AI助手",
+  "name": "Rin's Screenshot Explainer",
   "version": "1.0",
-  "description": "截图并让大模型解释，支持对话模式。",
+  "description": "截图并让大模型解释",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
@@ -14,7 +14,7 @@
       "24": "icons/icon24.png",
       "32": "icons/icon32.png"
     },
-    "default_title": "截图AI助手",
+    "default_title": "Rin's Screenshot Explainer",
     "default_popup": "popup.html"
   },
   "permissions": [
